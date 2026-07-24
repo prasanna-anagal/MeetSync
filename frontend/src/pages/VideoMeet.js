@@ -11,7 +11,10 @@ const SERVER_URL = process.env.REACT_APP_SERVER_URL || "http://localhost:8000";
 function VideoMeet() {
   const { url: roomId } = useParams();
   const localVideoRef = useRef(null);
+  const socketRef = useRef(null);
   const [remoteStreams, setRemoteStreams] = useState({});
+  const [messages, setMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -71,9 +74,14 @@ function VideoMeet() {
       }
 
       socket = io(SERVER_URL);
+      socketRef.current = socket;
 
       socket.on("connect", () => {
         socket.emit("join-call", roomId);
+      });
+
+      socket.on("chat-message", (data, sender) => {
+        setMessages((prev) => [...prev, { sender, data }]);
       });
 
       socket.on("user-joined", (newId) => {
@@ -115,6 +123,15 @@ function VideoMeet() {
     };
   }, [roomId]);
 
+  const handleSendChat = (e) => {
+    e.preventDefault();
+    if (!chatInput.trim() || !socketRef.current) return;
+
+    const sender = localStorage.getItem("username") || "Guest";
+    socketRef.current.emit("chat-message", chatInput.trim(), sender);
+    setChatInput("");
+  };
+
   return (
     <div>
       <h2>Meeting: {roomId}</h2>
@@ -130,6 +147,21 @@ function VideoMeet() {
           }}
         />
       ))}
+
+      <div>
+        <h3>Chat</h3>
+        <ul>
+          {messages.map((m, i) => (
+            <li key={i}>
+              <b>{m.sender}:</b> {m.data}
+            </li>
+          ))}
+        </ul>
+        <form onSubmit={handleSendChat}>
+          <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} />
+          <button type="submit">Send</button>
+        </form>
+      </div>
     </div>
   );
 }

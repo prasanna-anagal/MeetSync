@@ -12,15 +12,20 @@ function VideoMeet() {
   const { url: roomId } = useParams();
   const localVideoRef = useRef(null);
   const socketRef = useRef(null);
+  const peerConnectionsRef = useRef({});
+  const localStreamRef = useRef(null);
+  const screenStreamRef = useRef(null);
   const [remoteStreams, setRemoteStreams] = useState({});
   const [messages, setMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
 
   useEffect(() => {
     let mounted = true;
     let localStream = null;
     let socket = null;
     const peerConnections = {};
+    peerConnectionsRef.current = peerConnections;
 
     const createPeerConnection = (remoteId, isInitiator) => {
       const pc = new RTCPeerConnection(ICE_SERVERS);
@@ -69,6 +74,7 @@ function VideoMeet() {
       if (!mounted) return;
 
       localStream = stream;
+      localStreamRef.current = stream;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
@@ -123,6 +129,51 @@ function VideoMeet() {
     };
   }, [roomId]);
 
+  const replaceOutgoingVideoTrack = (track) => {
+    Object.values(peerConnectionsRef.current).forEach((pc) => {
+      const sender = pc.getSenders().find((s) => s.track && s.track.kind === "video");
+      if (sender) sender.replaceTrack(track);
+    });
+  };
+
+  const stopScreenShare = () => {
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((track) => track.stop());
+      screenStreamRef.current = null;
+    }
+
+    const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
+    if (cameraTrack) {
+      replaceOutgoingVideoTrack(cameraTrack);
+    }
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = localStreamRef.current;
+    }
+    setIsScreenSharing(false);
+  };
+
+  const startScreenShare = async () => {
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    screenStreamRef.current = screenStream;
+    const screenTrack = screenStream.getVideoTracks()[0];
+
+    replaceOutgoingVideoTrack(screenTrack);
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = screenStream;
+    }
+    setIsScreenSharing(true);
+
+    screenTrack.onended = () => stopScreenShare();
+  };
+
+  const handleToggleScreenShare = () => {
+    if (isScreenSharing) {
+      stopScreenShare();
+    } else {
+      startScreenShare();
+    }
+  };
+
   const handleSendChat = (e) => {
     e.preventDefault();
     if (!chatInput.trim() || !socketRef.current) return;
@@ -136,6 +187,9 @@ function VideoMeet() {
     <div>
       <h2>Meeting: {roomId}</h2>
       <video ref={localVideoRef} autoPlay muted playsInline width={240} />
+      <button onClick={handleToggleScreenShare}>
+        {isScreenSharing ? "Stop sharing" : "Share screen"}
+      </button>
       {Object.entries(remoteStreams).map(([id, stream]) => (
         <video
           key={id}

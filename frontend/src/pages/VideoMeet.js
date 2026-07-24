@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { io } from "socket.io-client";
 import axios from "axios";
 import {
@@ -22,6 +22,8 @@ import MicOffIcon from "@mui/icons-material/MicOff";
 import ScreenShareIcon from "@mui/icons-material/ScreenShare";
 import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
 import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
+import VideocamIcon from "@mui/icons-material/Videocam";
+import VideocamOffIcon from "@mui/icons-material/VideocamOff";
 
 const ICE_SERVERS = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -38,6 +40,7 @@ const recordMeetingInHistory = (meetingCode) => {
 
 function VideoMeet() {
   const { url: roomId } = useParams();
+  const navigate = useNavigate();
   const localVideoRef = useRef(null);
   const socketRef = useRef(null);
   const peerConnectionsRef = useRef({});
@@ -50,7 +53,10 @@ function VideoMeet() {
   const [callStatus, setCallStatus] = useState("connecting");
   const [isHost, setIsHost] = useState(false);
   const [joinRequests, setJoinRequests] = useState([]);
+  const [participantNames, setParticipantNames] = useState({});
+  const [hostId, setHostId] = useState(null);
   const [isMuted, setIsMuted] = useState(false);
+  const [isCameraOff, setIsCameraOff] = useState(false);
   const [mediaError, setMediaError] = useState("");
   const [screenShareError, setScreenShareError] = useState("");
   const isScreenShareSupported = typeof navigator.mediaDevices?.getDisplayMedia === "function";
@@ -135,8 +141,10 @@ function VideoMeet() {
       socket = io(SERVER_URL);
       socketRef.current = socket;
 
+      const username = localStorage.getItem("username") || "Guest";
+
       socket.on("connect", () => {
-        socket.emit("join-call", roomId);
+        socket.emit("join-call", roomId, username);
       });
 
       socket.on("chat-message", (data, sender) => {
@@ -145,19 +153,23 @@ function VideoMeet() {
 
       socket.on("waiting-for-approval", () => setCallStatus("waiting"));
 
-      socket.on("join-approved", ({ isHost: hostFlag }) => {
+      socket.on("join-approved", ({ isHost: hostFlag, hostId: currentHostId }) => {
         setCallStatus("active");
         setIsHost(hostFlag);
+        setHostId(currentHostId);
         recordMeetingInHistory(roomId);
       });
 
       socket.on("join-denied", () => setCallStatus("denied"));
 
-      socket.on("join-request", (requesterId) => {
-        setJoinRequests((prev) => [...prev, requesterId]);
+      socket.on("join-request", (requesterId, requesterName) => {
+        setJoinRequests((prev) => [...prev, { id: requesterId, name: requesterName }]);
       });
 
       socket.on("kicked", () => setCallStatus("kicked"));
+
+      socket.on("promoted-to-host", () => setIsHost(true));
+      socket.on("host-changed", (newHostId) => setHostId(newHostId));
 
       socket.on("request-mute", () => {
         const audioTrack = localStream.getAudioTracks()[0];
@@ -167,7 +179,8 @@ function VideoMeet() {
         }
       });
 
-      socket.on("user-joined", (newId) => {
+      socket.on("user-joined", (newId, clients, usernames) => {
+        setParticipantNames(usernames || {});
         if (newId !== socket.id && !peerConnections[newId]) {
           createPeerConnection(newId, true);
         }
@@ -191,7 +204,14 @@ function VideoMeet() {
         }
       });
 
-      socket.on("user-left", (id) => removePeer(id));
+      socket.on("user-left", (id) => {
+        removePeer(id);
+        setParticipantNames((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      });
     };
 
     init();
@@ -262,7 +282,12 @@ function VideoMeet() {
 
   const handleRespondJoinRequest = (requesterId, approved) => {
     socketRef.current?.emit("respond-join-request", requesterId, approved);
-    setJoinRequests((prev) => prev.filter((id) => id !== requesterId));
+    setJoinRequests((prev) => prev.filter((req) => req.id !== requesterId));
+  };
+
+  const handleLeaveCall = () => {
+    socketRef.current?.disconnect();
+    navigate("/home");
   };
 
   const handleKick = (participantId) => {
@@ -271,6 +296,13 @@ function VideoMeet() {
 
   const handleRequestMute = (participantId) => {
     socketRef.current?.emit("request-mute", participantId);
+  };
+
+  const handleToggleCamera = () => {
+    const videoTrack = localStreamRef.current?.getVideoTracks()[0];
+    if (!videoTrack) return;
+    videoTrack.enabled = isCameraOff;
+    setIsCameraOff(!isCameraOff);
   };
 
   const handleToggleMute = () => {
@@ -328,21 +360,26 @@ function VideoMeet() {
 
   return (
     <Container maxWidth="lg" sx={{ mt: 3 }}>
-      <Typography variant="h5" gutterBottom>
-        Meeting: {roomId}
-      </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Typography variant="h5" gutterBottom>
+          Meeting: {roomId}
+        </Typography>
+        <Button color="error" variant="outlined" onClick={handleLeaveCall}>
+          Leave
+        </Button>
+      </Stack>
 
       {isHost && joinRequests.length > 0 && (
         <Paper sx={{ p: 2, mb: 2 }}>
           <Typography variant="subtitle1">Join requests</Typography>
           <Stack spacing={1}>
-            {joinRequests.map((requesterId) => (
-              <Stack key={requesterId} direction="row" spacing={1} alignItems="center">
-                <Chip label={requesterId} size="small" />
-                <Button size="small" variant="contained" onClick={() => handleRespondJoinRequest(requesterId, true)}>
+            {joinRequests.map((req) => (
+              <Stack key={req.id} direction="row" spacing={1} alignItems="center">
+                <Chip label={req.name} size="small" />
+                <Button size="small" variant="contained" onClick={() => handleRespondJoinRequest(req.id, true)}>
                   Approve
                 </Button>
-                <Button size="small" onClick={() => handleRespondJoinRequest(requesterId, false)}>
+                <Button size="small" onClick={() => handleRespondJoinRequest(req.id, false)}>
                   Deny
                 </Button>
               </Stack>
@@ -352,25 +389,38 @@ function VideoMeet() {
       )}
 
       <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-        <Box sx={{ flex: 3 }}>
+        <Box sx={{ flex: 3, minWidth: 0 }}>
           <Stack direction="row" flexWrap="wrap" gap={2}>
-            <Paper sx={{ p: 1 }}>
-              <video ref={localVideoRef} autoPlay muted playsInline width={280} />
+            <Paper sx={{ p: 1, width: 280, boxSizing: "border-box", overflow: "hidden" }}>
+              <video
+                ref={(el) => {
+                  localVideoRef.current = el;
+                  if (el && localStreamRef.current) el.srcObject = localStreamRef.current;
+                }}
+                autoPlay
+                muted
+                playsInline
+                style={{ width: "100%", display: "block", borderRadius: 4 }}
+              />
               <Typography variant="caption" display="block" textAlign="center">
-                You
+                You{isHost ? " (host)" : ""}
               </Typography>
             </Paper>
 
             {Object.entries(remoteStreams).map(([id, stream]) => (
-              <Paper key={id} sx={{ p: 1 }}>
+              <Paper key={id} sx={{ p: 1, width: 280, boxSizing: "border-box", overflow: "hidden" }}>
                 <video
                   autoPlay
                   playsInline
-                  width={280}
+                  style={{ width: "100%", display: "block", borderRadius: 4 }}
                   ref={(el) => {
                     if (el) el.srcObject = stream;
                   }}
                 />
+                <Typography variant="caption" display="block" textAlign="center">
+                  {participantNames[id] || "Guest"}
+                  {hostId === id ? " (host)" : ""}
+                </Typography>
                 {isHost && (
                   <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1 }}>
                     <Button size="small" onClick={() => handleRequestMute(id)}>
@@ -401,6 +451,13 @@ function VideoMeet() {
               onClick={handleToggleMute}
             >
               {isMuted ? "Unmute" : "Mute"}
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={isCameraOff ? <VideocamOffIcon /> : <VideocamIcon />}
+              onClick={handleToggleCamera}
+            >
+              {isCameraOff ? "Start video" : "Stop video"}
             </Button>
           </Stack>
           {screenShareError && (

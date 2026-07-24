@@ -26,7 +26,7 @@ export const connectToSocket = (server) => {
         rooms[roomId] = [];
         roomHosts[roomId] = socket.id;
         addToRoom(socket, roomId);
-        socket.emit("join-approved");
+        socket.emit("join-approved", { isHost: true });
         return;
       }
 
@@ -52,7 +52,7 @@ export const connectToSocket = (server) => {
 
       if (approved) {
         addToRoom(requesterSocket, roomId);
-        requesterSocket.emit("join-approved");
+        requesterSocket.emit("join-approved", { isHost: false });
       } else {
         requesterSocket.emit("join-denied");
       }

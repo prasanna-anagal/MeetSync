@@ -453,8 +453,8 @@ function VideoMeet() {
 
   return (
     <Box sx={{ bgcolor: "#1a1a1a", color: "#fff", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 2 }}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
+      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" sx={{ p: { xs: 1, sm: 2 } }}>
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
           <Typography variant="h6">{roomId}</Typography>
           <Chip label={formatElapsed(elapsedSeconds)} size="small" sx={{ bgcolor: "#333", color: "#fff" }} />
           <IconButton size="small" onClick={handleCopyInvite} sx={{ color: "#fff" }} title="Copy meeting code">
@@ -473,7 +473,7 @@ function VideoMeet() {
           <Typography variant="subtitle1">Join requests</Typography>
           <Stack spacing={1}>
             {joinRequests.map((req) => (
-              <Stack key={req.id} direction="row" spacing={1} alignItems="center">
+              <Stack key={req.id} direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                 <Chip label={req.name} size="small" />
                 <Button size="small" variant="contained" onClick={() => handleRespondJoinRequest(req.id, true)}>
                   Approve
@@ -487,12 +487,16 @@ function VideoMeet() {
         </Paper>
       )}
 
-      <Stack direction="row" sx={{ flex: 1, px: 2, gap: 2, overflow: "hidden" }}>
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        sx={{ flex: 1, px: { xs: 1, sm: 2 }, gap: 2, overflow: { xs: "auto", md: "hidden" } }}
+      >
         <Box
           sx={{
             flex: 1,
+            minWidth: 0,
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
             gap: 2,
             alignContent: "start",
             overflowY: "auto",
@@ -561,7 +565,19 @@ function VideoMeet() {
         </Box>
 
         {showParticipants && (
-          <Paper sx={{ width: 260, p: 2, display: "flex", flexDirection: "column", bgcolor: "#242424", color: "#fff" }}>
+          <Paper
+            sx={{
+              width: { xs: "100%", md: 260 },
+              maxHeight: { xs: 200, md: "none" },
+              overflowY: "auto",
+              flexShrink: 0,
+              p: 2,
+              display: "flex",
+              flexDirection: "column",
+              bgcolor: "#242424",
+              color: "#fff",
+            }}
+          >
             <Typography variant="subtitle1" gutterBottom>
               Participants
             </Typography>
@@ -581,7 +597,18 @@ function VideoMeet() {
         )}
 
         {showChat && (
-          <Paper sx={{ width: 300, p: 2, display: "flex", flexDirection: "column", bgcolor: "#242424", color: "#fff" }}>
+          <Paper
+            sx={{
+              width: { xs: "100%", md: 300 },
+              height: { xs: 320, md: "auto" },
+              flexShrink: 0,
+              p: 2,
+              display: "flex",
+              flexDirection: "column",
+              bgcolor: "#242424",
+              color: "#fff",
+            }}
+          >
             <Typography variant="subtitle1" gutterBottom>
               Chat
             </Typography>
@@ -614,7 +641,13 @@ function VideoMeet() {
         </Alert>
       )}
 
-      <Stack direction="row" spacing={2} justifyContent="center" alignItems="center" sx={{ p: 2, bgcolor: "#111" }}>
+      <Stack
+        direction="row"
+        spacing={{ xs: 1, sm: 2 }}
+        justifyContent="center"
+        alignItems="center"
+        sx={{ p: { xs: 1, sm: 2 }, bgcolor: "#111", overflowX: "auto" }}
+      >
         <IconButton onClick={handleToggleMute} sx={isMuted ? { bgcolor: "error.main", color: "#fff" } : CONTROL_BUTTON_SX}>
           {isMuted ? <MicOffIcon /> : <MicIcon />}
         </IconButton>

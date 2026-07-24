@@ -19,6 +19,10 @@ function VideoMeet() {
   const [messages, setMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [callStatus, setCallStatus] = useState("connecting");
+  const [isHost, setIsHost] = useState(false);
+  const [joinRequests, setJoinRequests] = useState([]);
+  const [isMuted, setIsMuted] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -88,6 +92,29 @@ function VideoMeet() {
 
       socket.on("chat-message", (data, sender) => {
         setMessages((prev) => [...prev, { sender, data }]);
+      });
+
+      socket.on("waiting-for-approval", () => setCallStatus("waiting"));
+
+      socket.on("join-approved", ({ isHost: hostFlag }) => {
+        setCallStatus("active");
+        setIsHost(hostFlag);
+      });
+
+      socket.on("join-denied", () => setCallStatus("denied"));
+
+      socket.on("join-request", (requesterId) => {
+        setJoinRequests((prev) => [...prev, requesterId]);
+      });
+
+      socket.on("kicked", () => setCallStatus("kicked"));
+
+      socket.on("request-mute", () => {
+        const audioTrack = localStream.getAudioTracks()[0];
+        if (audioTrack) {
+          audioTrack.enabled = false;
+          setIsMuted(true);
+        }
       });
 
       socket.on("user-joined", (newId) => {
@@ -174,6 +201,26 @@ function VideoMeet() {
     }
   };
 
+  const handleRespondJoinRequest = (requesterId, approved) => {
+    socketRef.current?.emit("respond-join-request", requesterId, approved);
+    setJoinRequests((prev) => prev.filter((id) => id !== requesterId));
+  };
+
+  const handleKick = (participantId) => {
+    socketRef.current?.emit("kick-participant", participantId);
+  };
+
+  const handleRequestMute = (participantId) => {
+    socketRef.current?.emit("request-mute", participantId);
+  };
+
+  const handleToggleMute = () => {
+    const audioTrack = localStreamRef.current?.getAudioTracks()[0];
+    if (!audioTrack) return;
+    audioTrack.enabled = isMuted;
+    setIsMuted(!isMuted);
+  };
+
   const handleSendChat = (e) => {
     e.preventDefault();
     if (!chatInput.trim() || !socketRef.current) return;
@@ -183,6 +230,19 @@ function VideoMeet() {
     setChatInput("");
   };
 
+  if (callStatus === "connecting") {
+    return <h2>Connecting to meeting...</h2>;
+  }
+  if (callStatus === "waiting") {
+    return <h2>Waiting for the host to let you in...</h2>;
+  }
+  if (callStatus === "denied") {
+    return <h2>The host denied your request to join.</h2>;
+  }
+  if (callStatus === "kicked") {
+    return <h2>You were removed from the meeting.</h2>;
+  }
+
   return (
     <div>
       <h2>Meeting: {roomId}</h2>
@@ -190,16 +250,40 @@ function VideoMeet() {
       <button onClick={handleToggleScreenShare}>
         {isScreenSharing ? "Stop sharing" : "Share screen"}
       </button>
+      <button onClick={handleToggleMute}>{isMuted ? "Unmute" : "Mute"}</button>
+
+      {isHost && joinRequests.length > 0 && (
+        <div>
+          <h3>Join requests</h3>
+          <ul>
+            {joinRequests.map((requesterId) => (
+              <li key={requesterId}>
+                {requesterId}
+                <button onClick={() => handleRespondJoinRequest(requesterId, true)}>Approve</button>
+                <button onClick={() => handleRespondJoinRequest(requesterId, false)}>Deny</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {Object.entries(remoteStreams).map(([id, stream]) => (
-        <video
-          key={id}
-          autoPlay
-          playsInline
-          width={240}
-          ref={(el) => {
-            if (el) el.srcObject = stream;
-          }}
-        />
+        <div key={id}>
+          <video
+            autoPlay
+            playsInline
+            width={240}
+            ref={(el) => {
+              if (el) el.srcObject = stream;
+            }}
+          />
+          {isHost && (
+            <div>
+              <button onClick={() => handleRequestMute(id)}>Request mute</button>
+              <button onClick={() => handleKick(id)}>Kick</button>
+            </div>
+          )}
+        </div>
       ))}
 
       <div>

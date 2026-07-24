@@ -1,10 +1,14 @@
 import "dotenv/config";
 import express from "express";
+import { createServer } from "node:http";
 import mongoose from "mongoose";
 import cors from "cors";
 import userRoutes from "./routes/user.routes.js";
+import { connectToSocket } from "./socket/socketManager.js";
 
 const app = express();
+const server = createServer(app);
+const io = connectToSocket(server);
 const PORT = process.env.PORT || 8000;
 
 app.use(cors());
@@ -20,7 +24,7 @@ const start = async () => {
   const connection = await mongoose.connect(process.env.MONGO_URI);
   console.log(`MongoDB connected: ${connection.connection.host}`);
 
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
   });
 };

@@ -4,6 +4,7 @@ const rooms = {};
 const socketRooms = {};
 const roomHosts = {};
 const pendingRequests = {};
+const socketUsernames = {};
 
 export const connectToSocket = (server) => {
   const io = new Server(server, {
@@ -13,15 +14,33 @@ export const connectToSocket = (server) => {
     },
   });
 
+  const usernamesFor = (roomId) => {
+    const map = {};
+    (rooms[roomId] || []).forEach((id) => {
+      map[id] = socketUsernames[id] || "Guest";
+    });
+    return map;
+  };
+
   const addToRoom = (socket, roomId) => {
     rooms[roomId].push(socket.id);
     socketRooms[socket.id] = roomId;
     socket.join(roomId);
-    io.to(roomId).emit("user-joined", socket.id, rooms[roomId]);
+    io.to(roomId).emit("user-joined", socket.id, rooms[roomId], usernamesFor(roomId));
+  };
+
+  const promoteNewHost = (roomId) => {
+    if (!rooms[roomId] || rooms[roomId].length === 0) return;
+    const newHostId = rooms[roomId][0];
+    roomHosts[roomId] = newHostId;
+    io.to(newHostId).emit("promoted-to-host");
+    io.to(roomId).emit("host-changed", newHostId);
   };
 
   io.on("connection", (socket) => {
-    socket.on("join-call", (roomId) => {
+    socket.on("join-call", (roomId, username) => {
+      socketUsernames[socket.id] = username || "Guest";
+
       if (!rooms[roomId]) {
         rooms[roomId] = [];
         roomHosts[roomId] = socket.id;
@@ -35,7 +54,7 @@ export const connectToSocket = (server) => {
       }
       pendingRequests[roomId].push(socket.id);
       socket.emit("waiting-for-approval");
-      io.to(roomHosts[roomId]).emit("join-request", socket.id);
+      io.to(roomHosts[roomId]).emit("join-request", socket.id, socketUsernames[socket.id]);
     });
 
     socket.on("respond-join-request", (requesterId, approved) => {
@@ -69,6 +88,7 @@ export const connectToSocket = (server) => {
       }
 
       delete socketRooms[targetId];
+      delete socketUsernames[targetId];
       const index = rooms[roomId]?.indexOf(targetId);
       if (index !== undefined && index !== -1) {
         rooms[roomId].splice(index, 1);
@@ -94,7 +114,9 @@ export const connectToSocket = (server) => {
 
     socket.on("disconnect", () => {
       const roomId = socketRooms[socket.id];
+      const wasHost = roomId && roomHosts[roomId] === socket.id;
       delete socketRooms[socket.id];
+      delete socketUsernames[socket.id];
 
       if (roomId && rooms[roomId]) {
         const index = rooms[roomId].indexOf(socket.id);
@@ -111,6 +133,8 @@ export const connectToSocket = (server) => {
           delete rooms[roomId];
           delete roomHosts[roomId];
           delete pendingRequests[roomId];
+        } else if (wasHost) {
+          promoteNewHost(roomId);
         }
       }
     });

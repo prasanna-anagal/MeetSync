@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { Alert, Container, List, ListItem, ListItemText, Paper, Typography } from "@mui/material";
 
 const client = axios.create({
   baseURL: process.env.REACT_APP_API_BASE_URL || "http://localhost:8000/api/v1/users",
@@ -23,17 +24,24 @@ function History() {
   }, []);
 
   return (
-    <div>
-      <h2>Meeting history</h2>
-      {error && <p>{error}</p>}
-      <ul>
-        {meetings.map((meeting) => (
-          <li key={meeting._id}>
-            {meeting.meetingCode} — {new Date(meeting.date).toLocaleString()}
-          </li>
-        ))}
-      </ul>
-    </div>
+    <Container maxWidth="sm" sx={{ mt: 6 }}>
+      <Typography variant="h5" gutterBottom>
+        Meeting history
+      </Typography>
+      {error && <Alert severity="warning">{error}</Alert>}
+      <Paper elevation={2}>
+        <List>
+          {meetings.map((meeting) => (
+            <ListItem key={meeting._id} divider>
+              <ListItemText
+                primary={meeting.meetingCode}
+                secondary={new Date(meeting.date).toLocaleString()}
+              />
+            </ListItem>
+          ))}
+        </List>
+      </Paper>
+    </Container>
   );
 }
 

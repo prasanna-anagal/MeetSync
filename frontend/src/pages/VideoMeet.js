@@ -52,6 +52,8 @@ function VideoMeet() {
   const [joinRequests, setJoinRequests] = useState([]);
   const [isMuted, setIsMuted] = useState(false);
   const [mediaError, setMediaError] = useState("");
+  const [screenShareError, setScreenShareError] = useState("");
+  const isScreenShareSupported = typeof navigator.mediaDevices?.getDisplayMedia === "function";
 
   useEffect(() => {
     let mounted = true;
@@ -228,17 +230,26 @@ function VideoMeet() {
   };
 
   const startScreenShare = async () => {
-    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-    screenStreamRef.current = screenStream;
-    const screenTrack = screenStream.getVideoTracks()[0];
-
-    replaceOutgoingVideoTrack(screenTrack);
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = screenStream;
+    if (!isScreenShareSupported) {
+      setScreenShareError("Screen sharing isn't supported in this browser (most mobile browsers don't support it).");
+      return;
     }
-    setIsScreenSharing(true);
 
-    screenTrack.onended = () => stopScreenShare();
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      screenStreamRef.current = screenStream;
+      const screenTrack = screenStream.getVideoTracks()[0];
+
+      replaceOutgoingVideoTrack(screenTrack);
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = screenStream;
+      }
+      setIsScreenSharing(true);
+
+      screenTrack.onended = () => stopScreenShare();
+    } catch (err) {
+      setScreenShareError(`Could not start screen sharing: ${err.message}`);
+    }
   };
 
   const handleToggleScreenShare = () => {
@@ -375,13 +386,15 @@ function VideoMeet() {
           </Stack>
 
           <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
-            <Button
-              variant="outlined"
-              startIcon={isScreenSharing ? <StopScreenShareIcon /> : <ScreenShareIcon />}
-              onClick={handleToggleScreenShare}
-            >
-              {isScreenSharing ? "Stop sharing" : "Share screen"}
-            </Button>
+            {isScreenShareSupported && (
+              <Button
+                variant="outlined"
+                startIcon={isScreenSharing ? <StopScreenShareIcon /> : <ScreenShareIcon />}
+                onClick={handleToggleScreenShare}
+              >
+                {isScreenSharing ? "Stop sharing" : "Share screen"}
+              </Button>
+            )}
             <Button
               variant="outlined"
               startIcon={isMuted ? <MicOffIcon /> : <MicIcon />}
@@ -390,6 +403,11 @@ function VideoMeet() {
               {isMuted ? "Unmute" : "Mute"}
             </Button>
           </Stack>
+          {screenShareError && (
+            <Alert severity="warning" sx={{ mt: 2 }} onClose={() => setScreenShareError("")}>
+              {screenShareError}
+            </Alert>
+          )}
         </Box>
 
         <Paper sx={{ flex: 1, p: 2, display: "flex", flexDirection: "column", minHeight: 300 }}>

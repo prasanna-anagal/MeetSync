@@ -51,6 +51,7 @@ function VideoMeet() {
   const [isHost, setIsHost] = useState(false);
   const [joinRequests, setJoinRequests] = useState([]);
   const [isMuted, setIsMuted] = useState(false);
+  const [mediaError, setMediaError] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -102,7 +103,25 @@ function VideoMeet() {
     };
 
     const init = async () => {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setMediaError(
+          "Camera and microphone access requires a secure connection (HTTPS) or localhost. " +
+            "This page was loaded over an insecure connection, so the browser won't allow it."
+        );
+        return;
+      }
+
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      } catch (err) {
+        setMediaError(
+          err.name === "NotAllowedError"
+            ? "Camera/microphone permission was denied. Please allow access and reload."
+            : `Could not access camera or microphone: ${err.message}`
+        );
+        return;
+      }
       if (!mounted) return;
 
       localStream = stream;
@@ -258,6 +277,14 @@ function VideoMeet() {
     socketRef.current.emit("chat-message", chatInput.trim(), sender);
     setChatInput("");
   };
+
+  if (mediaError) {
+    return (
+      <Container maxWidth="sm" sx={{ mt: 8 }}>
+        <Alert severity="error">{mediaError}</Alert>
+      </Container>
+    );
+  }
 
   if (callStatus === "connecting") {
     return (

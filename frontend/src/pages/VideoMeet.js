@@ -24,6 +24,10 @@ import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
 import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import VideocamOffIcon from "@mui/icons-material/VideocamOff";
+import PeopleIcon from "@mui/icons-material/People";
+import ChatIcon from "@mui/icons-material/Chat";
+import CallEndIcon from "@mui/icons-material/CallEnd";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 
 const ICE_SERVERS = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -36,6 +40,20 @@ const recordMeetingInHistory = (meetingCode) => {
   const token = localStorage.getItem("token");
   if (!token) return;
   axios.post(`${API_BASE_URL}/add_to_activity`, { token, meeting_code: meetingCode }).catch(() => {});
+};
+
+const formatElapsed = (totalSeconds) => {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+};
+
+const CONTROL_BUTTON_SX = {
+  bgcolor: "#3c3c3c",
+  color: "#fff",
+  "&:hover": { bgcolor: "#4c4c4c" },
 };
 
 function VideoMeet() {
@@ -59,6 +77,11 @@ function VideoMeet() {
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [mediaError, setMediaError] = useState("");
   const [screenShareError, setScreenShareError] = useState("");
+  const [showParticipants, setShowParticipants] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [callStartTime, setCallStartTime] = useState(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [copySuccess, setCopySuccess] = useState(false);
   const isScreenShareSupported = typeof navigator.mediaDevices?.getDisplayMedia === "function";
 
   useEffect(() => {
@@ -157,6 +180,7 @@ function VideoMeet() {
         setCallStatus("active");
         setIsHost(hostFlag);
         setHostId(currentHostId);
+        setCallStartTime(Date.now());
         recordMeetingInHistory(roomId);
       });
 
@@ -225,6 +249,14 @@ function VideoMeet() {
       }
     };
   }, [roomId]);
+
+  useEffect(() => {
+    if (!callStartTime) return undefined;
+    const interval = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - callStartTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [callStartTime]);
 
   const replaceOutgoingVideoTrack = (track) => {
     Object.values(peerConnectionsRef.current).forEach((pc) => {
@@ -321,6 +353,16 @@ function VideoMeet() {
     setChatInput("");
   };
 
+  const handleCopyInvite = async () => {
+    try {
+      await navigator.clipboard.writeText(roomId);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch {
+      // Clipboard API unavailable (e.g. insecure origin) - fail silently, not critical.
+    }
+  };
+
   if (mediaError) {
     return (
       <Container maxWidth="sm" sx={{ mt: 8 }}>
@@ -331,46 +373,52 @@ function VideoMeet() {
 
   if (callStatus === "connecting") {
     return (
-      <Container sx={{ mt: 8, textAlign: "center" }}>
+      <Box sx={{ bgcolor: "#1a1a1a", color: "#fff", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Typography variant="h6">Connecting to meeting...</Typography>
-      </Container>
+      </Box>
     );
   }
   if (callStatus === "waiting") {
     return (
-      <Container sx={{ mt: 8, textAlign: "center" }}>
+      <Box sx={{ bgcolor: "#1a1a1a", color: "#fff", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Typography variant="h6">Waiting for the host to let you in...</Typography>
-      </Container>
+      </Box>
     );
   }
   if (callStatus === "denied") {
     return (
-      <Container sx={{ mt: 8, textAlign: "center" }}>
+      <Container maxWidth="sm" sx={{ mt: 8 }}>
         <Alert severity="error">The host denied your request to join.</Alert>
       </Container>
     );
   }
   if (callStatus === "kicked") {
     return (
-      <Container sx={{ mt: 8, textAlign: "center" }}>
+      <Container maxWidth="sm" sx={{ mt: 8 }}>
         <Alert severity="warning">You were removed from the meeting.</Alert>
       </Container>
     );
   }
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 3 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center">
-        <Typography variant="h5" gutterBottom>
-          Meeting: {roomId}
-        </Typography>
-        <Button color="error" variant="outlined" onClick={handleLeaveCall}>
-          Leave
-        </Button>
+    <Box sx={{ bgcolor: "#1a1a1a", color: "#fff", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 2 }}>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <Typography variant="h6">{roomId}</Typography>
+          <Chip label={formatElapsed(elapsedSeconds)} size="small" sx={{ bgcolor: "#333", color: "#fff" }} />
+          <IconButton size="small" onClick={handleCopyInvite} sx={{ color: "#fff" }} title="Copy meeting code">
+            <ContentCopyIcon fontSize="small" />
+          </IconButton>
+          {copySuccess && (
+            <Typography variant="caption" sx={{ color: "success.light" }}>
+              Copied!
+            </Typography>
+          )}
+        </Stack>
       </Stack>
 
       {isHost && joinRequests.length > 0 && (
-        <Paper sx={{ p: 2, mb: 2 }}>
+        <Paper sx={{ p: 2, mx: 2, mb: 2 }}>
           <Typography variant="subtitle1">Join requests</Typography>
           <Stack spacing={1}>
             {joinRequests.map((req) => (
@@ -388,110 +436,139 @@ function VideoMeet() {
         </Paper>
       )}
 
-      <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-        <Box sx={{ flex: 3, minWidth: 0 }}>
-          <Stack direction="row" flexWrap="wrap" gap={2}>
-            <Paper sx={{ p: 1, width: 280, boxSizing: "border-box", overflow: "hidden" }}>
+      <Stack direction="row" sx={{ flex: 1, px: 2, gap: 2, overflow: "hidden" }}>
+        <Box
+          sx={{
+            flex: 1,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gap: 2,
+            alignContent: "start",
+            overflowY: "auto",
+            pb: 2,
+          }}
+        >
+          <Paper sx={{ p: 1, bgcolor: "#242424", boxSizing: "border-box", overflow: "hidden" }}>
+            <video
+              ref={(el) => {
+                localVideoRef.current = el;
+                if (el && localStreamRef.current) el.srcObject = localStreamRef.current;
+              }}
+              autoPlay
+              muted
+              playsInline
+              style={{ width: "100%", display: "block", borderRadius: 4 }}
+            />
+            <Typography variant="caption" display="block" textAlign="center" sx={{ color: "#ccc" }}>
+              You{isHost ? " (host)" : ""}
+            </Typography>
+          </Paper>
+
+          {Object.entries(remoteStreams).map(([id, stream]) => (
+            <Paper key={id} sx={{ p: 1, bgcolor: "#242424", boxSizing: "border-box", overflow: "hidden" }}>
               <video
-                ref={(el) => {
-                  localVideoRef.current = el;
-                  if (el && localStreamRef.current) el.srcObject = localStreamRef.current;
-                }}
                 autoPlay
-                muted
                 playsInline
                 style={{ width: "100%", display: "block", borderRadius: 4 }}
+                ref={(el) => {
+                  if (el) el.srcObject = stream;
+                }}
               />
-              <Typography variant="caption" display="block" textAlign="center">
-                You{isHost ? " (host)" : ""}
+              <Typography variant="caption" display="block" textAlign="center" sx={{ color: "#ccc" }}>
+                {participantNames[id] || "Guest"}
+                {hostId === id ? " (host)" : ""}
               </Typography>
+              {isHost && (
+                <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1 }}>
+                  <Button size="small" onClick={() => handleRequestMute(id)}>
+                    Request mute
+                  </Button>
+                  <IconButton size="small" color="error" onClick={() => handleKick(id)}>
+                    <PersonRemoveIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
+              )}
             </Paper>
-
-            {Object.entries(remoteStreams).map(([id, stream]) => (
-              <Paper key={id} sx={{ p: 1, width: 280, boxSizing: "border-box", overflow: "hidden" }}>
-                <video
-                  autoPlay
-                  playsInline
-                  style={{ width: "100%", display: "block", borderRadius: 4 }}
-                  ref={(el) => {
-                    if (el) el.srcObject = stream;
-                  }}
-                />
-                <Typography variant="caption" display="block" textAlign="center">
-                  {participantNames[id] || "Guest"}
-                  {hostId === id ? " (host)" : ""}
-                </Typography>
-                {isHost && (
-                  <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1 }}>
-                    <Button size="small" onClick={() => handleRequestMute(id)}>
-                      Request mute
-                    </Button>
-                    <IconButton size="small" color="error" onClick={() => handleKick(id)}>
-                      <PersonRemoveIcon fontSize="small" />
-                    </IconButton>
-                  </Stack>
-                )}
-              </Paper>
-            ))}
-          </Stack>
-
-          <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
-            {isScreenShareSupported && (
-              <Button
-                variant="outlined"
-                startIcon={isScreenSharing ? <StopScreenShareIcon /> : <ScreenShareIcon />}
-                onClick={handleToggleScreenShare}
-              >
-                {isScreenSharing ? "Stop sharing" : "Share screen"}
-              </Button>
-            )}
-            <Button
-              variant="outlined"
-              startIcon={isMuted ? <MicOffIcon /> : <MicIcon />}
-              onClick={handleToggleMute}
-            >
-              {isMuted ? "Unmute" : "Mute"}
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={isCameraOff ? <VideocamOffIcon /> : <VideocamIcon />}
-              onClick={handleToggleCamera}
-            >
-              {isCameraOff ? "Start video" : "Stop video"}
-            </Button>
-          </Stack>
-          {screenShareError && (
-            <Alert severity="warning" sx={{ mt: 2 }} onClose={() => setScreenShareError("")}>
-              {screenShareError}
-            </Alert>
-          )}
+          ))}
         </Box>
 
-        <Paper sx={{ flex: 1, p: 2, display: "flex", flexDirection: "column", minHeight: 300 }}>
-          <Typography variant="subtitle1" gutterBottom>
-            Chat
-          </Typography>
-          <List sx={{ flexGrow: 1, overflowY: "auto" }}>
-            {messages.map((m, i) => (
-              <ListItem key={i} disablePadding>
-                <ListItemText primary={`${m.sender}: ${m.data}`} />
+        {showParticipants && (
+          <Paper sx={{ width: 260, p: 2, display: "flex", flexDirection: "column", bgcolor: "#242424", color: "#fff" }}>
+            <Typography variant="subtitle1" gutterBottom>
+              Participants
+            </Typography>
+            <List>
+              <ListItem disablePadding>
+                <ListItemText
+                  primary={`You${isHost ? " (host)" : ""}${isMuted ? " - muted" : ""}`}
+                />
               </ListItem>
-            ))}
-          </List>
-          <Box component="form" onSubmit={handleSendChat} sx={{ display: "flex", gap: 1 }}>
-            <TextField
-              size="small"
-              fullWidth
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-            />
-            <Button type="submit" variant="contained">
-              Send
-            </Button>
-          </Box>
-        </Paper>
+              {Object.entries(remoteStreams).map(([id]) => (
+                <ListItem key={id} disablePadding>
+                  <ListItemText primary={`${participantNames[id] || "Guest"}${hostId === id ? " (host)" : ""}`} />
+                </ListItem>
+              ))}
+            </List>
+          </Paper>
+        )}
+
+        {showChat && (
+          <Paper sx={{ width: 300, p: 2, display: "flex", flexDirection: "column", bgcolor: "#242424", color: "#fff" }}>
+            <Typography variant="subtitle1" gutterBottom>
+              Chat
+            </Typography>
+            <List sx={{ flexGrow: 1, overflowY: "auto" }}>
+              {messages.map((m, i) => (
+                <ListItem key={i} disablePadding>
+                  <ListItemText primary={`${m.sender}: ${m.data}`} />
+                </ListItem>
+              ))}
+            </List>
+            <Box component="form" onSubmit={handleSendChat} sx={{ display: "flex", gap: 1 }}>
+              <TextField
+                size="small"
+                fullWidth
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                sx={{ bgcolor: "#fff", borderRadius: 1 }}
+              />
+              <Button type="submit" variant="contained">
+                Send
+              </Button>
+            </Box>
+          </Paper>
+        )}
       </Stack>
-    </Container>
+
+      {screenShareError && (
+        <Alert severity="warning" sx={{ mx: 2, mb: 1 }} onClose={() => setScreenShareError("")}>
+          {screenShareError}
+        </Alert>
+      )}
+
+      <Stack direction="row" spacing={2} justifyContent="center" alignItems="center" sx={{ p: 2, bgcolor: "#111" }}>
+        <IconButton onClick={handleToggleMute} sx={isMuted ? { bgcolor: "error.main", color: "#fff" } : CONTROL_BUTTON_SX}>
+          {isMuted ? <MicOffIcon /> : <MicIcon />}
+        </IconButton>
+        <IconButton onClick={handleToggleCamera} sx={isCameraOff ? { bgcolor: "error.main", color: "#fff" } : CONTROL_BUTTON_SX}>
+          {isCameraOff ? <VideocamOffIcon /> : <VideocamIcon />}
+        </IconButton>
+        {isScreenShareSupported && (
+          <IconButton onClick={handleToggleScreenShare} sx={isScreenSharing ? { bgcolor: "primary.main", color: "#fff" } : CONTROL_BUTTON_SX}>
+            {isScreenSharing ? <StopScreenShareIcon /> : <ScreenShareIcon />}
+          </IconButton>
+        )}
+        <IconButton onClick={() => setShowParticipants(!showParticipants)} sx={showParticipants ? { bgcolor: "primary.main", color: "#fff" } : CONTROL_BUTTON_SX}>
+          <PeopleIcon />
+        </IconButton>
+        <IconButton onClick={() => setShowChat(!showChat)} sx={showChat ? { bgcolor: "primary.main", color: "#fff" } : CONTROL_BUTTON_SX}>
+          <ChatIcon />
+        </IconButton>
+        <IconButton onClick={handleLeaveCall} sx={{ bgcolor: "error.main", color: "#fff", "&:hover": { bgcolor: "error.dark" } }}>
+          <CallEndIcon />
+        </IconButton>
+      </Stack>
+    </Box>
   );
 }
 

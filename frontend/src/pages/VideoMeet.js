@@ -82,7 +82,23 @@ function VideoMeet() {
   const [callStartTime, setCallStartTime] = useState(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [activeSpeakerId, setActiveSpeakerId] = useState(null);
+  const audioContextRef = useRef(null);
+  const analysersRef = useRef({});
   const isScreenShareSupported = typeof navigator.mediaDevices?.getDisplayMedia === "function";
+
+  const ensureAnalyser = (id, stream) => {
+    if (!stream.getAudioTracks().length || analysersRef.current[id]) return;
+    if (!audioContextRef.current) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      audioContextRef.current = new AudioContextClass();
+    }
+    const source = audioContextRef.current.createMediaStreamSource(stream);
+    const analyser = audioContextRef.current.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    analysersRef.current[id] = { analyser, dataArray: new Uint8Array(analyser.frequencyBinCount) };
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -107,6 +123,7 @@ function VideoMeet() {
 
       pc.ontrack = (event) => {
         setRemoteStreams((prev) => ({ ...prev, [remoteId]: event.streams[0] }));
+        ensureAnalyser(remoteId, event.streams[0]);
       };
 
       if (isInitiator) {
@@ -126,6 +143,7 @@ function VideoMeet() {
         pc.close();
         delete peerConnections[remoteId];
       }
+      delete analysersRef.current[remoteId];
       setRemoteStreams((prev) => {
         const next = { ...prev };
         delete next[remoteId];
@@ -160,6 +178,7 @@ function VideoMeet() {
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
+      ensureAnalyser("local", stream);
 
       socket = io(SERVER_URL);
       socketRef.current = socket;
@@ -247,6 +266,11 @@ function VideoMeet() {
       if (localStream) {
         localStream.getTracks().forEach((track) => track.stop());
       }
+      analysersRef.current = {};
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
     };
   }, [roomId]);
 
@@ -257,6 +281,26 @@ function VideoMeet() {
     }, 1000);
     return () => clearInterval(interval);
   }, [callStartTime]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      let loudestId = null;
+      let loudestLevel = 0;
+
+      Object.entries(analysersRef.current).forEach(([id, { analyser, dataArray }]) => {
+        analyser.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
+        if (average > loudestLevel) {
+          loudestLevel = average;
+          loudestId = id;
+        }
+      });
+
+      setActiveSpeakerId(loudestLevel > 15 ? loudestId : null);
+    }, 300);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const replaceOutgoingVideoTrack = (track) => {
     Object.values(peerConnectionsRef.current).forEach((pc) => {
@@ -448,7 +492,15 @@ function VideoMeet() {
             pb: 2,
           }}
         >
-          <Paper sx={{ p: 1, bgcolor: "#242424", boxSizing: "border-box", overflow: "hidden" }}>
+          <Paper
+            sx={{
+              p: 1,
+              bgcolor: "#242424",
+              boxSizing: "border-box",
+              overflow: "hidden",
+              border: activeSpeakerId === "local" ? "2px solid #4caf50" : "2px solid transparent",
+            }}
+          >
             <video
               ref={(el) => {
                 localVideoRef.current = el;
@@ -465,7 +517,16 @@ function VideoMeet() {
           </Paper>
 
           {Object.entries(remoteStreams).map(([id, stream]) => (
-            <Paper key={id} sx={{ p: 1, bgcolor: "#242424", boxSizing: "border-box", overflow: "hidden" }}>
+            <Paper
+              key={id}
+              sx={{
+                p: 1,
+                bgcolor: "#242424",
+                boxSizing: "border-box",
+                overflow: "hidden",
+                border: activeSpeakerId === id ? "2px solid #4caf50" : "2px solid transparent",
+              }}
+            >
               <video
                 autoPlay
                 playsInline

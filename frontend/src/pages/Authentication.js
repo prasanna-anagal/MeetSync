@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Box, Button, Container, Paper, TextField, Typography, Alert } from "@mui/material";
 import { useAuth } from "../contexts/AuthContext";
 
 function Authentication() {
@@ -22,6 +23,7 @@ function Authentication() {
         setMode("login");
       } else {
         await login(username, password);
+        localStorage.setItem("username", username);
         navigate("/home");
       }
     } catch (err) {
@@ -30,34 +32,46 @@ function Authentication() {
   };
 
   return (
-    <div>
-      <h2>{mode === "login" ? "Login" : "Register"}</h2>
-      <form onSubmit={handleSubmit}>
-        {mode === "register" && (
-          <div>
-            <label>Name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-        )}
-        <div>
-          <label>Username</label>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} />
-        </div>
-        <div>
-          <label>Password</label>
-          <input
+    <Container maxWidth="xs" sx={{ mt: 8 }}>
+      <Paper elevation={3} sx={{ p: 4 }}>
+        <Typography variant="h5" gutterBottom>
+          {mode === "login" ? "Login" : "Register"}
+        </Typography>
+        <Box component="form" onSubmit={handleSubmit} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          {mode === "register" && (
+            <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth />
+          )}
+          <TextField
+            label="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            fullWidth
+          />
+          <TextField
+            label="Password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            fullWidth
           />
-        </div>
-        <button type="submit">{mode === "login" ? "Login" : "Register"}</button>
-      </form>
-      {message && <p>{message}</p>}
-      <button onClick={() => setMode(mode === "login" ? "register" : "login")}>
-        {mode === "login" ? "Need an account? Register" : "Already have an account? Login"}
-      </button>
-    </div>
+          <Button type="submit" variant="contained">
+            {mode === "login" ? "Login" : "Register"}
+          </Button>
+        </Box>
+        {message && (
+          <Alert severity="info" sx={{ mt: 2 }}>
+            {message}
+          </Alert>
+        )}
+        <Button
+          onClick={() => setMode(mode === "login" ? "register" : "login")}
+          sx={{ mt: 2 }}
+          fullWidth
+        >
+          {mode === "login" ? "Need an account? Register" : "Already have an account? Login"}
+        </Button>
+      </Paper>
+    </Container>
   );
 }
 

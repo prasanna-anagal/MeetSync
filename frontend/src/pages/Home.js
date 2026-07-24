@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Box, Button, Container, Paper, TextField, Typography } from "@mui/material";
 
 function Home() {
   const [meetingCode, setMeetingCode] = useState("");
@@ -12,18 +13,27 @@ function Home() {
   };
 
   return (
-    <div>
-      <h2>MeetSync</h2>
-      <form onSubmit={handleJoin}>
-        <input
-          placeholder="Enter meeting code"
-          value={meetingCode}
-          onChange={(e) => setMeetingCode(e.target.value)}
-        />
-        <button type="submit">Join / Start Meeting</button>
-      </form>
-      <button onClick={() => navigate("/history")}>View history</button>
-    </div>
+    <Container maxWidth="xs" sx={{ mt: 8 }}>
+      <Paper elevation={3} sx={{ p: 4 }}>
+        <Typography variant="h5" gutterBottom>
+          MeetSync
+        </Typography>
+        <Box component="form" onSubmit={handleJoin} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <TextField
+            label="Meeting code"
+            value={meetingCode}
+            onChange={(e) => setMeetingCode(e.target.value)}
+            fullWidth
+          />
+          <Button type="submit" variant="contained">
+            Join / Start meeting
+          </Button>
+        </Box>
+        <Button onClick={() => navigate("/history")} sx={{ mt: 2 }} fullWidth>
+          View history
+        </Button>
+      </Paper>
+    </Container>
   );
 }
 

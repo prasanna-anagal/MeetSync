@@ -1,12 +1,21 @@
 import { Link } from "react-router-dom";
+import { Box, Button, Container, Typography } from "@mui/material";
 
 function Landing() {
   return (
-    <div>
-      <h1>MeetSync</h1>
-      <p>Video calls with chat, screen sharing, and host-controlled access.</p>
-      <Link to="/auth">Get started</Link>
-    </div>
+    <Container maxWidth="sm" sx={{ mt: 12, textAlign: "center" }}>
+      <Typography variant="h3" gutterBottom>
+        MeetSync
+      </Typography>
+      <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
+        Video calls with chat, screen sharing, and host-controlled access.
+      </Typography>
+      <Box>
+        <Button component={Link} to="/auth" variant="contained" size="large">
+          Get started
+        </Button>
+      </Box>
+    </Container>
   );
 }
 

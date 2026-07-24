@@ -452,7 +452,16 @@ function VideoMeet() {
   }
 
   return (
-    <Box sx={{ bgcolor: "#1a1a1a", color: "#fff", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <Box
+      sx={{
+        bgcolor: "#1a1a1a",
+        color: "#fff",
+        height: "100vh",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" sx={{ p: { xs: 1, sm: 2 } }}>
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
           <Typography variant="h6">{roomId}</Typography>

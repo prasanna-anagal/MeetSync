@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { io } from "socket.io-client";
+import axios from "axios";
 import {
   Alert,
   Box,
@@ -27,6 +28,13 @@ const ICE_SERVERS = {
 };
 
 const SERVER_URL = process.env.REACT_APP_SERVER_URL || "http://localhost:8000";
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:8000/api/v1/users";
+
+const recordMeetingInHistory = (meetingCode) => {
+  const token = localStorage.getItem("token");
+  if (!token) return;
+  axios.post(`${API_BASE_URL}/add_to_activity`, { token, meeting_code: meetingCode }).catch(() => {});
+};
 
 function VideoMeet() {
   const { url: roomId } = useParams();
@@ -119,6 +127,7 @@ function VideoMeet() {
       socket.on("join-approved", ({ isHost: hostFlag }) => {
         setCallStatus("active");
         setIsHost(hostFlag);
+        recordMeetingInHistory(roomId);
       });
 
       socket.on("join-denied", () => setCallStatus("denied"));

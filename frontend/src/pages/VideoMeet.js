@@ -56,14 +56,38 @@ const CONTROL_BUTTON_SX = {
   "&:hover": { bgcolor: "#4c4c4c" },
 };
 
+// A stable useRef (not an inline arrow-function ref) so React doesn't detach and
+// reattach the <video> element - and re-assign its stream - on every parent
+// re-render (e.g. the once-a-second timer tick). The effect only re-runs when
+// the actual stream object changes.
+function VideoTile({ stream, muted }) {
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  return (
+    <video
+      ref={videoRef}
+      autoPlay
+      muted={muted}
+      playsInline
+      style={{ width: "100%", display: "block", borderRadius: 4 }}
+    />
+  );
+}
+
 function VideoMeet() {
   const { url: roomId } = useParams();
   const navigate = useNavigate();
-  const localVideoRef = useRef(null);
   const socketRef = useRef(null);
   const peerConnectionsRef = useRef({});
   const localStreamRef = useRef(null);
-  const screenStreamRef = useRef(null);
+  const [localStream, setLocalStream] = useState(null);
+  const [screenMediaStream, setScreenMediaStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({});
   const [messages, setMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
@@ -102,7 +126,7 @@ function VideoMeet() {
 
   useEffect(() => {
     let mounted = true;
-    let localStream = null;
+    let mediaStream = null;
     let socket = null;
     const peerConnections = {};
     peerConnectionsRef.current = peerConnections;
@@ -111,8 +135,8 @@ function VideoMeet() {
       const pc = new RTCPeerConnection(ICE_SERVERS);
       peerConnections[remoteId] = pc;
 
-      localStream.getTracks().forEach((track) => {
-        pc.addTrack(track, localStream);
+      mediaStream.getTracks().forEach((track) => {
+        pc.addTrack(track, mediaStream);
       });
 
       pc.onicecandidate = (event) => {
@@ -180,11 +204,9 @@ function VideoMeet() {
       }
       if (!mounted) return;
 
-      localStream = stream;
+      mediaStream = stream;
       localStreamRef.current = stream;
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
+      setLocalStream(stream);
       ensureAnalyser("local", stream);
 
       socket = io(SERVER_URL);
@@ -222,7 +244,7 @@ function VideoMeet() {
       socket.on("host-changed", (newHostId) => setHostId(newHostId));
 
       socket.on("request-mute", () => {
-        const audioTrack = localStream.getAudioTracks()[0];
+        const audioTrack = mediaStream.getAudioTracks()[0];
         if (audioTrack) {
           audioTrack.enabled = false;
           setIsMuted(true);
@@ -270,8 +292,8 @@ function VideoMeet() {
       mounted = false;
       if (socket) socket.disconnect();
       Object.keys(peerConnections).forEach(removePeer);
-      if (localStream) {
-        localStream.getTracks().forEach((track) => track.stop());
+      if (mediaStream) {
+        mediaStream.getTracks().forEach((track) => track.stop());
       }
       analysersRef.current = {};
       if (audioContextRef.current) {
@@ -317,17 +339,16 @@ function VideoMeet() {
   };
 
   const stopScreenShare = () => {
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach((track) => track.stop());
-      screenStreamRef.current = null;
-    }
+    setScreenMediaStream((current) => {
+      if (current) {
+        current.getTracks().forEach((track) => track.stop());
+      }
+      return null;
+    });
 
     const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
     if (cameraTrack) {
       replaceOutgoingVideoTrack(cameraTrack);
-    }
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = localStreamRef.current;
     }
     setIsScreenSharing(false);
   };
@@ -340,13 +361,10 @@ function VideoMeet() {
 
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      screenStreamRef.current = screenStream;
+      setScreenMediaStream(screenStream);
       const screenTrack = screenStream.getVideoTracks()[0];
 
       replaceOutgoingVideoTrack(screenTrack);
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = screenStream;
-      }
       setIsScreenSharing(true);
 
       screenTrack.onended = () => stopScreenShare();
@@ -521,16 +539,7 @@ function VideoMeet() {
               border: activeSpeakerId === "local" ? "2px solid #4caf50" : "2px solid transparent",
             }}
           >
-            <video
-              ref={(el) => {
-                localVideoRef.current = el;
-                if (el && localStreamRef.current) el.srcObject = localStreamRef.current;
-              }}
-              autoPlay
-              muted
-              playsInline
-              style={{ width: "100%", display: "block", borderRadius: 4 }}
-            />
+            <VideoTile stream={isScreenSharing ? screenMediaStream : localStream} muted />
             <Typography variant="caption" display="block" textAlign="center" sx={{ color: "#ccc" }}>
               You{isHost ? " (host)" : ""}
             </Typography>
@@ -547,14 +556,7 @@ function VideoMeet() {
                 border: activeSpeakerId === id ? "2px solid #4caf50" : "2px solid transparent",
               }}
             >
-              <video
-                autoPlay
-                playsInline
-                style={{ width: "100%", display: "block", borderRadius: 4 }}
-                ref={(el) => {
-                  if (el) el.srcObject = stream;
-                }}
-              />
+              <VideoTile stream={stream} />
               <Typography variant="caption" display="block" textAlign="center" sx={{ color: "#ccc" }}>
                 {participantNames[id] || "Guest"}
                 {hostId === id ? " (host)" : ""}

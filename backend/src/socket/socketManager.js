@@ -1,6 +1,7 @@
 import { Server } from "socket.io";
 
 const rooms = {};
+const socketRooms = {};
 
 export const connectToSocket = (server) => {
   const io = new Server(server, {
@@ -16,6 +17,7 @@ export const connectToSocket = (server) => {
         rooms[roomId] = [];
       }
       rooms[roomId].push(socket.id);
+      socketRooms[socket.id] = roomId;
       socket.join(roomId);
 
       io.to(roomId).emit("user-joined", socket.id, rooms[roomId]);
@@ -25,8 +27,17 @@ export const connectToSocket = (server) => {
       io.to(toId).emit("signal", socket.id, message);
     });
 
+    socket.on("chat-message", (data, sender) => {
+      const roomId = socketRooms[socket.id];
+      if (!roomId) return;
+      io.to(roomId).emit("chat-message", data, sender, socket.id);
+    });
+
     socket.on("disconnect", () => {
-      for (const roomId of Object.keys(rooms)) {
+      const roomId = socketRooms[socket.id];
+      delete socketRooms[socket.id];
+
+      if (roomId && rooms[roomId]) {
         const index = rooms[roomId].indexOf(socket.id);
         if (index !== -1) {
           rooms[roomId].splice(index, 1);

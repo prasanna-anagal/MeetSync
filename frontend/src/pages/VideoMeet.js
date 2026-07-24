@@ -1,6 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { io } from "socket.io-client";
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Container,
+  IconButton,
+  List,
+  ListItem,
+  ListItemText,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
+import MicIcon from "@mui/icons-material/Mic";
+import MicOffIcon from "@mui/icons-material/MicOff";
+import ScreenShareIcon from "@mui/icons-material/ScreenShare";
+import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
+import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
 
 const ICE_SERVERS = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -231,76 +251,136 @@ function VideoMeet() {
   };
 
   if (callStatus === "connecting") {
-    return <h2>Connecting to meeting...</h2>;
+    return (
+      <Container sx={{ mt: 8, textAlign: "center" }}>
+        <Typography variant="h6">Connecting to meeting...</Typography>
+      </Container>
+    );
   }
   if (callStatus === "waiting") {
-    return <h2>Waiting for the host to let you in...</h2>;
+    return (
+      <Container sx={{ mt: 8, textAlign: "center" }}>
+        <Typography variant="h6">Waiting for the host to let you in...</Typography>
+      </Container>
+    );
   }
   if (callStatus === "denied") {
-    return <h2>The host denied your request to join.</h2>;
+    return (
+      <Container sx={{ mt: 8, textAlign: "center" }}>
+        <Alert severity="error">The host denied your request to join.</Alert>
+      </Container>
+    );
   }
   if (callStatus === "kicked") {
-    return <h2>You were removed from the meeting.</h2>;
+    return (
+      <Container sx={{ mt: 8, textAlign: "center" }}>
+        <Alert severity="warning">You were removed from the meeting.</Alert>
+      </Container>
+    );
   }
 
   return (
-    <div>
-      <h2>Meeting: {roomId}</h2>
-      <video ref={localVideoRef} autoPlay muted playsInline width={240} />
-      <button onClick={handleToggleScreenShare}>
-        {isScreenSharing ? "Stop sharing" : "Share screen"}
-      </button>
-      <button onClick={handleToggleMute}>{isMuted ? "Unmute" : "Mute"}</button>
+    <Container maxWidth="lg" sx={{ mt: 3 }}>
+      <Typography variant="h5" gutterBottom>
+        Meeting: {roomId}
+      </Typography>
 
       {isHost && joinRequests.length > 0 && (
-        <div>
-          <h3>Join requests</h3>
-          <ul>
+        <Paper sx={{ p: 2, mb: 2 }}>
+          <Typography variant="subtitle1">Join requests</Typography>
+          <Stack spacing={1}>
             {joinRequests.map((requesterId) => (
-              <li key={requesterId}>
-                {requesterId}
-                <button onClick={() => handleRespondJoinRequest(requesterId, true)}>Approve</button>
-                <button onClick={() => handleRespondJoinRequest(requesterId, false)}>Deny</button>
-              </li>
+              <Stack key={requesterId} direction="row" spacing={1} alignItems="center">
+                <Chip label={requesterId} size="small" />
+                <Button size="small" variant="contained" onClick={() => handleRespondJoinRequest(requesterId, true)}>
+                  Approve
+                </Button>
+                <Button size="small" onClick={() => handleRespondJoinRequest(requesterId, false)}>
+                  Deny
+                </Button>
+              </Stack>
             ))}
-          </ul>
-        </div>
+          </Stack>
+        </Paper>
       )}
 
-      {Object.entries(remoteStreams).map(([id, stream]) => (
-        <div key={id}>
-          <video
-            autoPlay
-            playsInline
-            width={240}
-            ref={(el) => {
-              if (el) el.srcObject = stream;
-            }}
-          />
-          {isHost && (
-            <div>
-              <button onClick={() => handleRequestMute(id)}>Request mute</button>
-              <button onClick={() => handleKick(id)}>Kick</button>
-            </div>
-          )}
-        </div>
-      ))}
+      <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+        <Box sx={{ flex: 3 }}>
+          <Stack direction="row" flexWrap="wrap" gap={2}>
+            <Paper sx={{ p: 1 }}>
+              <video ref={localVideoRef} autoPlay muted playsInline width={280} />
+              <Typography variant="caption" display="block" textAlign="center">
+                You
+              </Typography>
+            </Paper>
 
-      <div>
-        <h3>Chat</h3>
-        <ul>
-          {messages.map((m, i) => (
-            <li key={i}>
-              <b>{m.sender}:</b> {m.data}
-            </li>
-          ))}
-        </ul>
-        <form onSubmit={handleSendChat}>
-          <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} />
-          <button type="submit">Send</button>
-        </form>
-      </div>
-    </div>
+            {Object.entries(remoteStreams).map(([id, stream]) => (
+              <Paper key={id} sx={{ p: 1 }}>
+                <video
+                  autoPlay
+                  playsInline
+                  width={280}
+                  ref={(el) => {
+                    if (el) el.srcObject = stream;
+                  }}
+                />
+                {isHost && (
+                  <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1 }}>
+                    <Button size="small" onClick={() => handleRequestMute(id)}>
+                      Request mute
+                    </Button>
+                    <IconButton size="small" color="error" onClick={() => handleKick(id)}>
+                      <PersonRemoveIcon fontSize="small" />
+                    </IconButton>
+                  </Stack>
+                )}
+              </Paper>
+            ))}
+          </Stack>
+
+          <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+            <Button
+              variant="outlined"
+              startIcon={isScreenSharing ? <StopScreenShareIcon /> : <ScreenShareIcon />}
+              onClick={handleToggleScreenShare}
+            >
+              {isScreenSharing ? "Stop sharing" : "Share screen"}
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={isMuted ? <MicOffIcon /> : <MicIcon />}
+              onClick={handleToggleMute}
+            >
+              {isMuted ? "Unmute" : "Mute"}
+            </Button>
+          </Stack>
+        </Box>
+
+        <Paper sx={{ flex: 1, p: 2, display: "flex", flexDirection: "column", minHeight: 300 }}>
+          <Typography variant="subtitle1" gutterBottom>
+            Chat
+          </Typography>
+          <List sx={{ flexGrow: 1, overflowY: "auto" }}>
+            {messages.map((m, i) => (
+              <ListItem key={i} disablePadding>
+                <ListItemText primary={`${m.sender}: ${m.data}`} />
+              </ListItem>
+            ))}
+          </List>
+          <Box component="form" onSubmit={handleSendChat} sx={{ display: "flex", gap: 1 }}>
+            <TextField
+              size="small"
+              fullWidth
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+            />
+            <Button type="submit" variant="contained">
+              Send
+            </Button>
+          </Box>
+        </Paper>
+      </Stack>
+    </Container>
   );
 }
 
